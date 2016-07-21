@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Numerics;
@@ -129,29 +130,79 @@ namespace SplineyMcSplineFace
     public class BSpline
     {
         /// <summary>
+        /// Return the index of the knot span
+        /// </summary>
+        /// <param name="k"></param>
+        /// <param name="u"></param>
+        /// <returns></returns>
+        public static int KnotSpanFor(double[] k, double u)
+        {
+            var lower = -1;
+            var i = 0;
+            var upper = k.Length;
+            do
+            {
+                i = (upper + lower)/2;
+                if (k[i] > u)
+                    upper = i;
+                else
+                {
+                    lower = i;
+                }
+            } while ((upper - lower)>1);
+
+            return lower;
+        }
+
+
+        private class FastDoubleComparer : Comparer<double>
+        {
+          public override int Compare(double x, double y)
+          {
+            return x.CompareTo(y);
+          }
+        }
+
+        /// <summary>
         /// Equation 2.5 in Nurbs book 
         /// </summary>
         /// <param name="k">knot vector</param>
+        /// <param name="p">The degree</param>
         /// <param name="i">The ith basic function index</param>
-        /// <param name="p">The order ( degree + 1 )</param>
         /// <param name="u">The curve parameter</param>
         /// <returns></returns>
-        public static double Basis(double[] k, int i, int p, double u)
+        public static double Basis(double[] k, int p, int i, double u)
         {
             Debug.Assert(i<k.Length);
             Debug.Assert(i>=0);
             if (p == 0)
                 return k[i] <= u && u < k[i + 1] ? 1 : 0;
 
+
             var a =  (u - k[i])
                    / (k[i + p] - k[i])
-                   * Basis(k, i, p - 1, u);
+                   * Basis(k, p - 1, i, u);
+
+            if (Double.IsNaN(a))
+                a = 0;
 
             var b =  (k[i+p+1] - u)
                    / (k[i + p + 1] - k[i+1])
-                   * Basis(k, i+1, p - 1, u);
+                   * Basis(k, p - 1, i+1, u);
+
+            if (Double.IsNaN(b))
+                b = 0;
 
             return a + b;
+        }
+
+        public static Func<double, double> Basis(double[] k, int p, int i)
+        {
+            return u => Basis(k, p, i, u);
+        }
+        public static Func<int, double, double> Basis(double[] k, int p)
+        {
+            return (i,u) => Basis(k, p, i, u);
         }
 
 
